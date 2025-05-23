@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package umbra.types;
+
+message ReliabilityInfo{ 
+	bytes TODO =1;
+	uint32 b = 2;
+}
+
+
+enum AppFrameType{
+	AppFrame_Unknown = 0;
+	AppFrame_ChatMessage = 1;
+
+}
+
+enum MetaFrameType{
+	MetaFrame_Unknown = 0;
+}
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// App Messages
+///////////////////////////////////////////////////////////////////////////////
+
+message ChatMessage {
+	string text = 1;
+	string message_id = 2;
+}
+
+message ConversationInvite {
+
+}
+
+message Contact {
+	string name = 1;
+
+}
+
+
+// This Frame type captures 
+message DeveloperSpecifiedFrameV1 {
+	uint32 application_id = 1;
+	uint32 type_id = 2;
+	bytes encoded_frame = 3;
+}
+
+// ApplicationFrames combine 
+message ApplicationFrameV1 {
+	oneof payload {
+		ChatMessage chat_msg = 3;
+		bytes developer_specified = 99;  // Should this be a defined type which standardizes non standard types
+	};
+}
+// Should all messages be signed? I think no
+// Can the term frame be used as a disasmbiguated msg?
+
+
+
+// Sign then ecncrypt - we need to ensure that messages are domain seperated
+message SignedApplicationFrameV1 {
+	bytes signature = 1; // Multisig
+	bytes payload = 2;
+	
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Meta Messages
+///////////////////////////////////////////////////////////////////////////////
+
+
+message MetaFrameV1 {
+	oneof payload {
+		ConversationInvite conversation = 1;
+	}
+}
+
+message ConfidentialFrame {
+	oneof type{
+		ApplicationFrameV1 appFrameV1= 1;
+		SignedApplicationFrameV1 signedFrame =2;
+		MetaFrameV1 metaFrame =3;	
+	}
+
+}
+
+message PublicFrame{
+	oneof frame_type{
+		Contact contact = 1;
+	}
+}
+
+message Frame {
+	ReliabilityInfo reliabilityInfo = 1;
+	oneof frame_type {
+		ConfidentialFrame confidential_frame =10;
+		PublicFrame public_frame_frame =20;
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// ProtocoChatl Messages
+///////////////////////////////////////////////////////////////////////////////
+
+// EncryptedFrame
+message EncryptedBytes {
+	oneof algo {
+
+		Ecies ecies = 1;
+    	Aes256Ctr aes256ctr = 2;
+  }
+
+
+  message Aes256Ctr {
+	bytes encrypted_bytes=1;
+  }
+  
+  message Ecies {
+	bytes ephemeral_pubkey = 1;
+	bytes tag = 2;
+	bytes encrypted_bytes=3;
+  }
+
+}
+
+/*
+message PayloadHeader {
+	uint32 type
+	uint32 encryptionType
+}
+*/
+
+
+
+
+// This doesnt allow for user defined types easily
+message PayloadV1 {
+	// Unique Message Identifier
+	string msg_id =1;
+	//Where this topic was posted perhaps with Network
+	//string topic
+	
+	oneof frame_type {
+		EncryptedBytes encrypted_frame = 10;
+		PublicFrame public_frame = 20;
+	}
+	
+}
+
+
+
+
+enum PayloadTags{
+	Uknown = 0;
+	Tag_EncryptedFrame = 1;
+	Tag_PublicFrame = 2;
+}
+
+
+// message MutliPayload {
+// 	repeated TaggedPayload t = 1;
+// }
+
+message TaggedPayload {
+	uint32 protocol = 1; // /umbra/15/
+	uint32 tag = 10;
+	bytes payload_bytes =20;
+}
