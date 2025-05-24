@@ -54,7 +54,6 @@ message ApplicationFrameV1 {
 		bytes developer_specified = 99;  // Should this be a defined type which standardizes non standard types
 	};
 }
-// Should all messages be signed? I think no
 // Can the term frame be used as a disasmbiguated msg?
 
 
@@ -77,6 +76,7 @@ message MetaFrameV1 {
 	}
 }
 
+// This isn't working on receiving, its clunky and makes decoding a mess
 message ConfidentialFrame {
 	oneof type{
 		ApplicationFrameV1 appFrameV1= 1;
@@ -110,6 +110,7 @@ message EncryptedBytes {
 
 		Ecies ecies = 1;
     	Aes256Ctr aes256ctr = 2;
+		Reversed reversed = 3;
   }
 
 
@@ -123,33 +124,16 @@ message EncryptedBytes {
 	bytes encrypted_bytes=3;
   }
 
+  message Reversed {
+	bytes encrypted_bytes=1;
+  }
+
 }
 
-/*
-message PayloadHeader {
-	uint32 type
-	uint32 encryptionType
+enum ProtocolTags {
+	Unknown = 0;
+	UmbraV1 = 1;
 }
-*/
-
-
-
-
-// This doesnt allow for user defined types easily
-message PayloadV1 {
-	// Unique Message Identifier
-	string msg_id =1;
-	//Where this topic was posted perhaps with Network
-	//string topic
-	
-	oneof frame_type {
-		EncryptedBytes encrypted_frame = 10;
-		PublicFrame public_frame = 20;
-	}
-	
-}
-
-
 
 
 enum PayloadTags{
@@ -159,10 +143,8 @@ enum PayloadTags{
 }
 
 
-// message MutliPayload {
-// 	repeated TaggedPayload t = 1;
-// }
-
+// This represents the root type of all payloads in the system. 
+// All packets must be wrapped in a TaggedPayload so the SDK can know how to parse it
 message TaggedPayload {
 	uint32 protocol = 1; // /umbra/15/
 	uint32 tag = 10;
