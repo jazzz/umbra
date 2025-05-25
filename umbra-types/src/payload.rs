@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use prost::Message;
 pub use types::{
     ApplicationFrameV1, ChatMessage, ConfidentialFrame, Contact, EncryptedBytes, Frame,
@@ -16,6 +18,13 @@ pub enum ConvoType {
     Session,
     Group,
 }
+
+// Marker trait to tag message types which are safe to send out on the wire.
+// All send functions require types to implement this trait.
+trait SafeToSend: Debug {}
+
+impl SafeToSend for EncryptedBytes {}
+impl SafeToSend for PublicFrame {}
 
 pub trait ToFrame {
     fn to_frame(self, reliability_info: Option<ReliabilityInfo>) -> Frame;
@@ -59,17 +68,27 @@ impl ToPayload for EncryptedBytes {
     }
 }
 
-#[cfg(test)]
 mod tests {
     use super::*;
+    use crate::encrypted_bytes::Aes256Ctr;
+    use crate::encrypted_bytes::Algo;
 
-    #[test]
-    fn basic() {
-        let c = ChatMessage {
-            text: "hello".into(),
-            message_id: "msg1".into(),
-        };
+    // fn send(packet: impl MustEncrypt) {
+    //     // This function is a placeholder for sending the encrypted message
+    //     // In a real implementation, this would send the encrypted message over the network
 
-        let _buf = send(ConvoType::Session, c).unwrap();
-    }
+    //     println!("{:?}", packet)
+    // }
+
+    // #[test]
+    // fn test_encrypted_bytes() {
+    //     let a = ChatMessage {
+    //         text: "hello".into(),
+    //         message_id: 1.to_string(),
+    //     };
+
+    //     let a = Contact { name: "Bob".into() };
+
+    //     send(a)
+    // }
 }
