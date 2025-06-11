@@ -4,13 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-hex = "0.4.3"
-rand = "0.9.1"
-sha3 = "0.10.8"
-thiserror = "2.0.12"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
-umbra-types = { path = "../umbra-types" }
-
-[build-dependencies]
-protoc-rust = "2"
+umbra-content-types = { path = "../umbra-content-types" }
+umbra-sdk = { path = "../umbra-sdk" }

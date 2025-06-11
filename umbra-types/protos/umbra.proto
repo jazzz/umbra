@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package umbra.types;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Framing Messages
+///////////////////////////////////////////////////////////////////////////////
+
+message ReliabilityInfo {
+
+}
+
+message ContentFrame {
+    uint32 domain = 1;
+    uint32 tag = 2;
+    bytes bytes = 3;
+}
+
+message ConversationInvite {
+    //TODO
+}
+
+
+message Frame {
+
+    // TODO: How best to integrate SDS information
+	ReliabilityInfo reliabilityInfo = 1;
+	oneof frame_type {
+		ContentFrame content = 2;
+        //TODO: These duplicate types are annoying to work with find a better naming scheme
+		ConversationInvite conversation_invite = 3;
+	}
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Protocol Messages
+///////////////////////////////////////////////////////////////////////////////
+
+// TODO: This also encompasses plaintexts, do we care about the name? 
+// Alternatives: ???
+
+message EncryptedBytes {
+
+    oneof encryption {
+        bytes encrypted_bytes=1;
+		Ecies ecies = 2;
+    	Aes256Ctr aes256ctr = 3;
+		Plaintext plaintext = 4;
+        Reversed reversed = 5;
+    }
+   
+    message Aes256Ctr {
+        bytes encrypted_bytes=1;
+    }
+    
+    message Ecies {
+        bytes encrypted_bytes=1;
+        bytes ephemeral_pubkey = 2;
+        bytes tag = 3;
+        
+    }
+    // Testing placeholder
+    message Reversed {
+        bytes encrypted_bytes=1;
+    }
+
+    message Plaintext {
+        bytes bytes=1;
+    }
+
+}
+
+message Envelope {
+    EncryptedBytes encrypted_bytes = 1;
+    string conversation_id = 2; 
+    // bytes recipient_id = 4; // The recipient's ID
+    // uint32 timestamp = 5; // Unix timestamp in seconds
+}
+
+enum ProtocolTags {
+	Unknown = 0;
+	UmbraV1 = 1;
+}
+
+
+enum PayloadTags{
+	Uknown = 0;
+	Tag_Envelope = 1;
+	Tag_PublicFrame = 2;
+}
+
+
+// This represents the root type of all payloads in the system. 
+// All packets must be wrapped in a TaggedPayload so the SDK can know how to parse it
+message TaggedPayload {
+	uint32 protocol = 1; // /umbra/15/
+	uint32 tag = 10;
+	bytes payload_bytes = 20;
+}

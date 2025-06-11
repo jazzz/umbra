@@ -3,12 +3,7 @@ pub mod payload;
 pub use payload::ToFrame;
 pub use prost::Message;
 
-pub use payload::types::{
-    ApplicationFrameV1, ChatMessage, ConfidentialFrame, Contact, EncryptedBytes, Frame,
-    PublicFrame, ReliabilityInfo, application_frame_v1, confidential_frame,
-    encrypted_bytes::{self, Aes256Ctr},
-    frame, public_frame,
-};
+pub use payload::types::{EncryptedBytes, Frame, ReliabilityInfo};
 
-pub use crate::payload::types::PayloadTags;
-pub use payload::encrypted_bytes::Algo;
+pub use payload::types::encrypted_bytes;
+pub use payload::types::frame::FrameType;

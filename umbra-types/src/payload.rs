@@ -1,16 +1,26 @@
-use std::fmt::Debug;
-
 use prost::Message;
+use types::frame::{self};
 pub use types::{
-    ApplicationFrameV1, ChatMessage, ConfidentialFrame, Contact, EncryptedBytes, Frame,
-    PublicFrame, ReliabilityInfo, application_frame_v1, confidential_frame,
-    encrypted_bytes::{self, Aes256Ctr},
-    frame, public_frame,
+    ContentFrame, ConversationInvite, EncryptedBytes, Envelope, Frame, ReliabilityInfo,
 };
-use types::{PayloadTags, ProtocolTags, TaggedPayload};
+
+use types::*;
 
 pub mod types {
     include!(concat!(env!("OUT_DIR"), "/umbra.types.rs"));
+}
+
+///////////////////////////////////////////////////////////////////////////
+
+impl From<u32> for PayloadTags {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => PayloadTags::Uknown,
+            1 => PayloadTags::TagEnvelope,
+            2 => PayloadTags::TagPublicFrame,
+            _ => panic!("Unknown PayloadTag value: {}", value),
+        }
+    }
 }
 
 pub enum ConvoType {
@@ -19,12 +29,11 @@ pub enum ConvoType {
     Group,
 }
 
-// Marker trait to tag message types which are safe to send out on the wire.
-// All send functions require types to implement this trait.
-trait SafeToSend: Debug {}
+// // Marker trait to tag message types which are safe to send out on the wire.
+// // All send functions require types to implement this trait.
+// trait SafeToSend: Debug {}
 
-impl SafeToSend for EncryptedBytes {}
-impl SafeToSend for PublicFrame {}
+// impl SafeToSend for EncryptedBytes {}
 
 pub trait ToFrame {
     fn to_frame(self, reliability_info: Option<ReliabilityInfo>) -> Frame;
@@ -34,61 +43,21 @@ pub trait ToPayload {
     fn to_payload(self) -> TaggedPayload;
 }
 
-impl ToFrame for ChatMessage {
+impl ToFrame for ConversationInvite {
     fn to_frame(self, reliability_info: Option<ReliabilityInfo>) -> Frame {
         Frame {
             reliability_info: reliability_info,
-            frame_type: Some(frame::FrameType::ConfidentialFrame(ConfidentialFrame {
-                r#type: Some(confidential_frame::Type::AppFrameV1(ApplicationFrameV1 {
-                    payload: Some(application_frame_v1::Payload::ChatMsg(self)),
-                })),
-            })),
+            frame_type: Some(frame::FrameType::ConversationInvite(ConversationInvite {})),
         }
     }
 }
 
-impl ToFrame for Contact {
-    fn to_frame(self, reliability_info: Option<ReliabilityInfo>) -> Frame {
-        Frame {
-            reliability_info: reliability_info,
-            frame_type: Some(frame::FrameType::PublicFrameFrame(PublicFrame {
-                frame_type: Some(public_frame::FrameType::Contact(self)),
-            })),
-        }
-    }
-}
-
-impl ToPayload for EncryptedBytes {
+impl ToPayload for Envelope {
     fn to_payload(self) -> TaggedPayload {
         TaggedPayload {
             protocol: ProtocolTags::UmbraV1 as u32,
-            tag: PayloadTags::TagEncryptedFrame as u32,
+            tag: PayloadTags::TagEnvelope as u32,
             payload_bytes: self.encode_to_vec(),
         }
     }
-}
-
-mod tests {
-    // use super::*;
-    // use crate::encrypted_bytes::Aes256Ctr;
-    // use crate::encrypted_bytes::Algo;
-
-    // fn send(packet: impl MustEncrypt) {
-    //     // This function is a placeholder for sending the encrypted message
-    //     // In a real implementation, this would send the encrypted message over the network
-
-    //     println!("{:?}", packet)
-    // }
-
-    // #[test]
-    // fn test_encrypted_bytes() {
-    //     let a = ChatMessage {
-    //         text: "hello".into(),
-    //         message_id: 1.to_string(),
-    //     };
-
-    //     let a = Contact { name: "Bob".into() };
-
-    //     send(a)
-    // }
 }

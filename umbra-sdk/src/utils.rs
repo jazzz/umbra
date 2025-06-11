@@ -1,5 +1,6 @@
 use rand::{self, Rng, distr::Alphanumeric};
 
+#[allow(dead_code)]
 pub fn generate_random_string(length: u8) -> String {
     rand::rng()
         .sample_iter(&Alphanumeric)

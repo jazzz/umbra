@@ -648,16 +648,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
+name = "umbra-content-types"
+version = "0.0.1-dev"
+dependencies = [
+ "bytes 0.4.12",
+ "prost",
+ "prost-build",
+ "protoc-rust",
+ "umbra-types",
+]
+
+[[package]]
 name = "umbra-poc"
 version = "0.1.0"
 dependencies = [
+ "tracing",
+ "tracing-subscriber",
+ "umbra-content-types",
+ "umbra-sdk",
+]
+
+[[package]]
+name = "umbra-sdk"
+version = "0.0.1-dev"
+dependencies = [
  "hex",
- "protoc-rust",
+ "prost",
  "rand",
  "sha3",
  "thiserror",
- "tracing",
- "tracing-subscriber",
  "umbra-types",
 ]
 

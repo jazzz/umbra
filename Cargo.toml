@@ -1,11 +1,15 @@
 [workspace]
 members = [
+    "umbra-content-types",
     "umbra-poc",
+    "umbra-sdk",
     "umbra-types"
 ]
 
 default-members = [
+    "umbra-content-types",
     "umbra-poc",
+    "umbra-sdk",
 ]
 
 resolver = "3"

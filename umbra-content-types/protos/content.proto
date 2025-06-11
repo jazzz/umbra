@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package umbra.contenttypes;
+
+
+///////////////////////////////////////////////////////////////////////////////
+// App Messages
+///////////////////////////////////////////////////////////////////////////////
+
+
+enum ContentTags {
+    ContentTag_Unknown = 0;
+    ContentTag_ChatMessage = 5;
+    ContentTag_ReactjiMessage = 6;
+}   
+
+// Type 1
+message ChatMessage {
+	string text = 1;
+}
+
+// Type 2
+message ReactjiMessage {
+    //TODO
+}
