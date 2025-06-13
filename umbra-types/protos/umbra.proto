@@ -17,8 +17,9 @@ message ContentFrame {
     bytes bytes = 3;
 }
 
+// TODO Placeholder definition
 message ConversationInvite {
-    //TODO
+    repeated string participants = 1;
 }
 
 

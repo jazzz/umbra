@@ -10,6 +10,12 @@ pub mod types {
     include!(concat!(env!("OUT_DIR"), "/umbra.types.rs"));
 }
 
+impl ConversationInvite {
+    pub fn new(participants: Vec<String>) -> Self {
+        ConversationInvite { participants }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 
 impl From<u32> for PayloadTags {
@@ -68,7 +74,7 @@ impl ToFrame for ConversationInvite {
     fn to_frame(self, reliability_info: Option<ReliabilityInfo>) -> Frame {
         Frame {
             reliability_info: reliability_info,
-            frame_type: Some(frame::FrameType::ConversationInvite(ConversationInvite {})),
+            frame_type: Some(frame::FrameType::ConversationInvite(self)),
         }
     }
 }

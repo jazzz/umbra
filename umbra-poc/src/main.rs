@@ -137,10 +137,13 @@ fn main() {
     let mut queue_sub = QueueSub::new();
     let amal_client = queue_sub.register();
     let bola_client = queue_sub.register();
-    let mut amal = UmbraClient::new(amal_client);
-    let bola = UmbraClient::new(bola_client);
+    let mut amal = UmbraClient::new(amal_client, "amal".into());
+    let bola = UmbraClient::new(bola_client, "bola".into());
     amal.add_content_handler(|convo, content_frame| print_content("Amal", convo, content_frame));
-    let a2b = amal.create_conversation("bola_address".into()).unwrap();
+    amal.add_content_handler(|convo, content_frame| print_content("Bola", convo, content_frame));
+
+    // Subscibe before starting the clients
+    let a2b = amal.create_conversation("bola".into()).unwrap();
 
     amal.start();
     bola.start();
