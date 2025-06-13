@@ -2,7 +2,7 @@ use prost::Message;
 use types::*;
 use umbra_types::{
     Frame, ReliabilityInfo, ToFrame,
-    payload::{ContentFrame, types::frame},
+    payload::{Content, ContentFrame, TaggedContent, types::frame},
 };
 
 pub mod types {
@@ -15,17 +15,8 @@ impl ChatMessage {
     }
 }
 
-impl ToFrame for ChatMessage {
-    fn to_frame(self, reliability_info: Option<ReliabilityInfo>) -> Frame {
-        Frame {
-            reliability_info: reliability_info,
-            frame_type: Some(frame::FrameType::Content(ContentFrame {
-                domain: 0,
-                tag: 0,
-                bytes: self.encode_to_vec(),
-            })),
-        }
-    }
+impl TaggedContent for ChatMessage {
+    const TAG: u32 = ContentTags::ContentTagChatMessage as u32;
 }
 
 impl From<ChatMessage> for Vec<u8> {
@@ -37,5 +28,16 @@ impl From<ChatMessage> for Vec<u8> {
 impl Into<ChatMessage> for Vec<u8> {
     fn into(self) -> ChatMessage {
         ChatMessage::decode(self.as_slice()).expect("Failed to decode ChatMessage")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chat_message_new() {
+        let chat_message = ChatMessage::new("Hello, World!".to_string());
+        chat_message.to_frame(None);
     }
 }

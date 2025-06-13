@@ -29,11 +29,13 @@ pub enum ConvoType {
     Group,
 }
 
-// // Marker trait to tag message types which are safe to send out on the wire.
-// // All send functions require types to implement this trait.
-// trait SafeToSend: Debug {}
+pub trait TaggedContent {
+    const TAG: u32;
+}
 
-// impl SafeToSend for EncryptedBytes {}
+pub trait Content {
+    fn wrap(self) -> ContentFrame;
+}
 
 pub trait ToFrame {
     fn to_frame(self, reliability_info: Option<ReliabilityInfo>) -> Frame;
@@ -41,6 +43,25 @@ pub trait ToFrame {
 
 pub trait ToPayload {
     fn to_payload(self) -> TaggedPayload;
+}
+
+impl<T: TaggedContent + Into<Vec<u8>>> Content for T {
+    fn wrap(self) -> ContentFrame {
+        ContentFrame {
+            domain: 0,
+            tag: <T as TaggedContent>::TAG,
+            bytes: self.into(),
+        }
+    }
+}
+
+impl<T: Content> ToFrame for T {
+    fn to_frame(self, reliability_info: Option<ReliabilityInfo>) -> Frame {
+        Frame {
+            reliability_info,
+            frame_type: Some(frame::FrameType::Content(self.wrap())),
+        }
+    }
 }
 
 impl ToFrame for ConversationInvite {

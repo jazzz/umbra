@@ -5,6 +5,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
+use tracing::{debug, info, instrument};
 use umbra_types::{
     EncryptedBytes, Message,
     payload::{
@@ -73,11 +74,11 @@ impl Conversation {
             .ok_or(UmbraError::DecodingError("bad packet".into()))?
         {
             frame::FrameType::Content(content_frame) => {
-                println!("conttent {:?}", content_frame);
+                debug!("conttent {:?}", content_frame);
                 Ok(Some(frame))
             }
             frame::FrameType::ConversationInvite(conversation_invite) => {
-                println!("Invite {:?}", conversation_invite);
+                debug!("Invite {:?}", conversation_invite);
                 Ok(Some(frame))
             }
         }
@@ -140,7 +141,7 @@ impl UmbraClient {
         self.get_conversation(addr)
     }
 
-    pub fn recv(self, bytes: &[u8]) -> Result<(), UmbraError> {
+    pub fn recv(&self, bytes: &[u8]) -> Result<(), UmbraError> {
         // Placeholder for receiving messages
 
         let payload =
@@ -158,7 +159,7 @@ impl UmbraClient {
     }
 
     fn handle_envelope(&self, payload: Envelope) -> Result<(), UmbraError> {
-        println!("Received Envelope: {:?}", payload);
+        debug!("ReceivedEnvelope: {:?}", payload);
 
         let enc = payload.encrypted_bytes.ok_or(UmbraError::DecodingError(
             "No encrypted bytes found".to_string(),
@@ -191,10 +192,8 @@ impl UmbraClient {
                 Ok(())
             }
             frame::FrameType::ConversationInvite(conversation_invite) => {
-                // Handle Conversation Invite
-                println!("Received Conversation Invite: {:?}", conversation_invite);
-                // Here you would typically create a new conversation or handle the invite logic.
-                return Ok(()); // Returning None as we don't have further processing for invites.
+                debug!("Received Conversation Invite: {:?}", conversation_invite);
+                return Ok(());
             }
         }
     }

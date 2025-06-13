@@ -9,6 +9,7 @@ prost = "0.13.5"
 rand = "0.9.1"
 sha3 = "0.10.8"
 thiserror = "2.0.12"
+tracing = "0.1.41"
 umbra-types = { path = "../umbra-types" }
 
 [build-dependencies]

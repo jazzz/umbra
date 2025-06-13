@@ -1,5 +1,7 @@
 pub mod payload;
 
+pub use payload::Content;
+pub use payload::TaggedContent;
 pub use payload::ToFrame;
 pub use prost::Message;
 
