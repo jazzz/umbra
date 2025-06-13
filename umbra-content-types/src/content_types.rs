@@ -1,9 +1,6 @@
 use prost::Message;
 use types::*;
-use umbra_types::{
-    Frame, ReliabilityInfo, ToFrame,
-    payload::{Content, ContentFrame, TaggedContent, types::frame},
-};
+use umbra_types::payload::TaggedContent;
 
 pub mod types {
     include!(concat!(env!("OUT_DIR"), "/umbra.contenttypes.rs"));

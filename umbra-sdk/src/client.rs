@@ -1,11 +1,12 @@
 use crate::crypto;
 use crate::error::UmbraError;
 
+use std::sync::RwLock;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-use tracing::{debug, info, instrument};
+use tracing::{debug, error};
 use umbra_types::{
     EncryptedBytes, Message,
     payload::{
@@ -24,14 +25,23 @@ pub type Blob = Vec<u8>;
 // pub type ContentTopic = String;
 // pub type ContentTopicRef<'a> = &'a str;
 
-/// Represents a conversation in the Umbra client.
-pub struct Conversation {
-    convo_id: String,
+pub trait DeliveryService {
+    fn send(&self, message: Blob) -> Result<(), UmbraError>;
+    fn recv(&self) -> Result<Option<Blob>, UmbraError>;
 }
 
-impl Conversation {
-    pub fn new(convo_id: String) -> Self {
-        Self { convo_id }
+/// Represents a conversation in the Umbra client.
+pub struct Conversation<T: DeliveryService + Send + Sync + 'static> {
+    convo_id: String,
+    ds: Arc<Mutex<T>>,
+}
+
+impl<T> Conversation<T>
+where
+    T: DeliveryService + Send + Sync + 'static,
+{
+    pub fn new(convo_id: String, ds: Arc<Mutex<T>>) -> Self {
+        Self { convo_id, ds }
     }
 
     // Returns an encoded payload for testing.
@@ -45,12 +55,15 @@ impl Conversation {
             })),
         };
 
-        Envelope {
+        let bytes = Envelope {
             encrypted_bytes: Some(Self::encrypt(frame)),
             conversation_id: self.convo_id.clone(),
         }
         .to_payload()
-        .encode_to_vec()
+        .encode_to_vec();
+
+        self.ds.lock().unwrap().send(bytes.clone()).unwrap();
+        bytes
     }
 
     fn encrypt(frame: Frame) -> EncryptedBytes {
@@ -102,46 +115,105 @@ impl Conversation {
         Frame::decode(plaintext.as_slice()).map_err(|e| UmbraError::DecodingError(e.to_string()))
     }
 }
-
-pub struct UmbraClient {
-    convos: HashMap<Addr, Arc<Mutex<Conversation>>>,
-    on_content_handlers: Vec<Box<dyn Fn(String, ContentFrame) + Send + Sync>>,
+pub struct UmbraState<T: DeliveryService + Send + Sync + 'static> {
+    convos: HashMap<Addr, Arc<Mutex<Conversation<T>>>>,
 }
 
-impl UmbraClient {
+impl<T> UmbraState<T>
+where
+    T: DeliveryService + Send + Sync + 'static,
+{
     pub fn new() -> Self {
         Self {
             convos: HashMap::new(),
-            on_content_handlers: Vec::new(),
         }
+    }
+
+    pub fn create_conversation(
+        &mut self,
+        ds: Arc<Mutex<T>>,
+        addr: Addr,
+    ) -> Option<Arc<Mutex<Conversation<T>>>> {
+        let convo_id = addr.to_string();
+        self.convos.insert(
+            addr.clone(),
+            Arc::new(Mutex::new(Conversation { convo_id, ds })),
+        );
+
+        self.get_conversation(addr)
+    }
+
+    fn get_conversation(&self, addr: Addr) -> Option<Arc<Mutex<Conversation<T>>>> {
+        self.convos.get(&addr).cloned()
+    }
+}
+
+pub struct UmbraClient<T: DeliveryService + Send + Sync + 'static> {
+    ds: Arc<Mutex<T>>,
+    state: Arc<RwLock<UmbraState<T>>>,
+    on_content_handlers: Arc<RwLock<Vec<Box<dyn Fn(String, ContentFrame) + Send + Sync>>>>,
+}
+
+impl<T> UmbraClient<T>
+where
+    T: DeliveryService + Send + Sync + 'static,
+{
+    pub fn new(ds: T) -> Self {
+        Self {
+            ds: Arc::new(Mutex::new(ds)),
+            state: Arc::new(RwLock::new(UmbraState::new())),
+            on_content_handlers: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    pub fn start(&self) {
+        let reciever = self.ds.clone();
+        let state = self.state.clone();
+        let handler = self.on_content_handlers.clone();
+        std::thread::spawn(move || {
+            loop {
+                let incomming_bytes = reciever.lock().unwrap().recv().unwrap();
+
+                if incomming_bytes.is_none() {
+                    continue;
+                }
+
+                let incoming_bytes = incomming_bytes.unwrap();
+                Self::recv(&state, &handler, incoming_bytes.as_slice())
+                    .unwrap_or_else(|e| error!("Error receiving bytes: {:?}", e));
+            }
+        });
     }
 
     pub fn add_content_handler<F>(&mut self, handler: F)
     where
         F: Fn(String, ContentFrame) + Send + Sync + 'static,
     {
-        self.on_content_handlers.push(Box::new(handler));
+        self.on_content_handlers
+            .write()
+            .unwrap()
+            .push(Box::new(handler));
     }
 
     pub fn address(&self) -> Addr {
         Addr::from("UmbraClient")
     }
 
-    fn get_conversation(&mut self, addr: Addr) -> Option<Arc<Mutex<Conversation>>> {
-        self.convos.get(&addr).cloned()
+    pub fn get_conversation(&self, addr: Addr) -> Option<Arc<Mutex<Conversation<T>>>> {
+        let state = self.state.read().unwrap();
+        state.get_conversation(addr)
     }
 
-    pub fn create_conversation(&mut self, addr: Addr) -> Option<Arc<Mutex<Conversation>>> {
-        let convo_id = addr.to_string();
-        self.convos.insert(
-            addr.clone(),
-            Arc::new(Mutex::new(Conversation { convo_id })),
-        );
-
-        self.get_conversation(addr)
+    pub fn create_conversation(&self, addr: Addr) -> Option<Arc<Mutex<Conversation<T>>>> {
+        let mut state = self.state.write().unwrap();
+        state.create_conversation(self.ds.clone(), addr)
     }
 
-    pub fn recv(&self, bytes: &[u8]) -> Result<(), UmbraError> {
+    pub fn recv(
+        state: &Arc<RwLock<UmbraState<T>>>,
+        handler: &Arc<RwLock<Vec<Box<dyn Fn(String, ContentFrame) + Send + Sync>>>>,
+        bytes: &[u8],
+    ) -> Result<(), UmbraError> {
         // Placeholder for receiving messages
 
         let payload =
@@ -152,22 +224,27 @@ impl UmbraClient {
             PayloadTags::TagEnvelope => {
                 let envelope = Envelope::decode(payload.payload_bytes.as_slice())
                     .map_err(|e| UmbraError::DecodingError(e.to_string()))?;
-                self.handle_envelope(envelope)
+                Self::handle_envelope(&state, handler, envelope)
             }
             PayloadTags::TagPublicFrame => todo!(),
         }
     }
 
-    fn handle_envelope(&self, payload: Envelope) -> Result<(), UmbraError> {
+    fn handle_envelope(
+        state: &Arc<RwLock<UmbraState<T>>>,
+        handler: &Arc<RwLock<Vec<Box<dyn Fn(String, ContentFrame) + Send + Sync>>>>,
+        payload: Envelope,
+    ) -> Result<(), UmbraError> {
         debug!("ReceivedEnvelope: {:?}", payload);
 
         let enc = payload.encrypted_bytes.ok_or(UmbraError::DecodingError(
             "No encrypted bytes found".to_string(),
         ))?;
 
-        let convo = self
-            .convos
-            .get(&payload.conversation_id)
+        let convo = state
+            .read()
+            .unwrap()
+            .get_conversation(payload.conversation_id)
             .ok_or(UmbraError::DecodingError("No matching Conversation".into()))?
             .clone();
 
@@ -182,7 +259,7 @@ impl UmbraClient {
 
         match frame.frame_type.as_ref().unwrap() {
             frame::FrameType::Content(content_frame) => {
-                for handler in self.on_content_handlers.iter() {
+                for handler in handler.read().unwrap().iter() {
                     handler(
                         convo.lock().unwrap().convo_id.clone(),
                         content_frame.clone(),
