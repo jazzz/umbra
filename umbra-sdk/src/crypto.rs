@@ -9,10 +9,9 @@ pub fn decrypt_reverse(buf: Vec<u8>) -> Vec<u8> {
     encrypt_reverse(buf)
 }
 
-#[allow(dead_code)]
-pub fn hash_string(buf: &str) -> String {
+pub fn hash_to_string<T: AsRef<[u8]>>(buf: T) -> String {
     let mut hasher = Sha3_256::new();
-    hasher.update(buf.as_bytes());
+    hasher.update(buf.as_ref());
     let result = hasher.finalize();
     hex::encode(result)
 }

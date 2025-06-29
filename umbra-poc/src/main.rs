@@ -7,8 +7,8 @@ use std::{
 use tracing::{debug, error, info};
 
 use serde::{Deserialize, Serialize};
-use umbra_content_types::{ChatMessage, Message, content_types::types::ContentTags};
-use umbra_sdk::{Blob, ContentFrame, DeliveryService, TaggedContent, UmbraClient};
+use umbra_content_types::{ChatMessage, Message, TaggedContent, content_types::types::ContentTags};
+use umbra_sdk::{Blob, ContentFrame, DeliveryService, UmbraClient};
 
 // User defined Message
 #[derive(Debug, Serialize, Deserialize)]
@@ -127,7 +127,7 @@ impl DeliveryService for QueueSubscription {
 
 fn main() {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO) // Set the maximum log level
+        .with_max_level(tracing::Level::DEBUG) // Set the maximum log level
         .with_target(false)
         .init();
 
@@ -138,12 +138,12 @@ fn main() {
     let amal_client = queue_sub.register();
     let bola_client = queue_sub.register();
     let mut amal = UmbraClient::new(amal_client, "amal".into());
-    let bola = UmbraClient::new(bola_client, "bola".into());
+    let mut bola = UmbraClient::new(bola_client, "bola".into());
     amal.add_content_handler(|convo, content_frame| print_content("Amal", convo, content_frame));
     amal.add_content_handler(|convo, content_frame| print_content("Bola", convo, content_frame));
 
     // Subscibe before starting the clients
-    let a2b = amal.create_conversation("bola".into()).unwrap();
+    let a2b = amal.create_private_conversation("bola".into()).unwrap();
 
     amal.start();
     bola.start();

@@ -1,31 +1,25 @@
-use crate::crypto;
-use crate::error::UmbraError;
-
+use prost::Message;
 use std::sync::RwLock;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-
-use tracing::{Level, debug, error, info, span, warn};
-use umbra_types::payload::ConversationInvite;
-use umbra_types::{
-    EncryptedBytes, Message,
-    payload::{
-        ContentFrame, ToPayload,
-        types::{Envelope, PayloadTags, TaggedPayload, frame},
-    },
+use tracing::{Level, debug, error, span, warn};
+use umbra_types::base::{
+    EncryptedBytes, InboxV1Frame, UmbraEnvelopeV1, encrypted_bytes, inbox_v1_frame,
 };
-use umbra_types::{Frame, ToFrame, encrypted_bytes::*};
+use umbra_types::common_frames::ContentFrame;
+use umbra_types::convos::private_v1::{self};
+use umbra_types::encryption;
+use umbra_types::invite;
+use umbra_types::payload::ToEnvelope;
+
+use crate::convos::private::PrivateConversation;
+use crate::error::UmbraError;
 
 // Type Aliases for Identitifiers
 pub type Addr = String;
-// pub type AddrRef<'a> = &'a str;
 pub type Blob = Vec<u8>;
-// pub type ClientId = String;
-// pub type ClientIdRef<'a> = &'a str;
-// pub type ContentTopic = String;
-// pub type ContentTopicRef<'a> = &'a str;
 
 pub trait DeliveryService {
     fn send(&self, message: Blob) -> Result<(), UmbraError>;
@@ -35,181 +29,7 @@ pub trait DeliveryService {
 pub trait Conversation<T: DeliveryService + Send + Sync + 'static> {
     fn convo_id(&self) -> String;
     fn send(&self, tag: u32, message: Blob) -> Vec<u8>;
-    fn recv(&self, enc_bytes: EncryptedBytes) -> Result<Option<Frame>, UmbraError>;
-}
-
-/// Represents a conversation in the Umbra client.
-pub struct PrivateConversation<T: DeliveryService + Send + Sync + 'static> {
-    convo_id: String,
-    ds: Arc<Mutex<T>>,
-}
-
-impl<T> PrivateConversation<T>
-where
-    T: DeliveryService + Send + Sync + 'static,
-{
-    pub fn new(convo_id: String, ds: Arc<Mutex<T>>) -> Self {
-        Self { convo_id, ds }
-    }
-
-    fn encrypt(frame: Frame) -> EncryptedBytes {
-        EncryptedBytes {
-            encryption: Some(Encryption::Reversed(Reversed {
-                encrypted_bytes: crypto::encrypt_reverse(frame.encode_to_vec()),
-            })),
-        }
-    }
-
-    fn decrypt(enc_bytes: EncryptedBytes) -> Result<Frame, UmbraError> {
-        // Check payload contained bytes
-        let a = enc_bytes
-            .encryption
-            .ok_or(UmbraError::DecodingError("".into()))?;
-
-        // Ensure the encryption type was "Reversed"
-        let buf = if let Encryption::Reversed(r) = a {
-            Ok(r.encrypted_bytes)
-        } else {
-            Err(UmbraError::DecodingError("Unsupported Enc".into()))
-        }?;
-
-        let plaintext = crypto::decrypt_reverse(buf);
-
-        Frame::decode(plaintext.as_slice()).map_err(|e| UmbraError::DecodingError(e.to_string()))
-    }
-}
-
-impl<T> Conversation<T> for PrivateConversation<T>
-where
-    T: DeliveryService + Send + Sync + 'static,
-{
-    // Returns an encoded payload for testing.
-    fn send(&self, tag: u32, message: Blob) -> Vec<u8> {
-        let frame = Frame {
-            reliability_info: None,
-            frame_type: Some(frame::FrameType::Content(ContentFrame {
-                domain: 0,
-                tag: tag,
-                bytes: message,
-            })),
-        };
-
-        let bytes = Envelope {
-            encrypted_bytes: Some(Self::encrypt(frame)),
-            conversation_id: self.convo_id.clone(),
-        }
-        .to_payload()
-        .encode_to_vec();
-
-        self.ds.lock().unwrap().send(bytes.clone()).unwrap();
-        bytes
-    }
-
-    // returns any message which was not handled by this conversation
-    fn recv(&self, enc_bytes: EncryptedBytes) -> Result<Option<Frame>, UmbraError> {
-        let frame = Self::decrypt(enc_bytes)?;
-
-        // Handle SDS data
-        let _ = frame.reliability_info;
-
-        match frame
-            .frame_type
-            .as_ref()
-            .ok_or(UmbraError::DecodingError("bad packet".into()))?
-        {
-            frame::FrameType::Content(content_frame) => {
-                debug!("conttent {:?}", content_frame);
-                Ok(Some(frame))
-            }
-            frame::FrameType::ConversationInvite(conversation_invite) => {
-                debug!("Invite {:?}", conversation_invite);
-                Ok(Some(frame))
-            }
-        }
-    }
-
-    fn convo_id(&self) -> String {
-        self.convo_id.clone()
-    }
-}
-
-pub struct InboxConversation<T: DeliveryService + Send + Sync + 'static> {
-    convo_id: String,
-    _ds: Arc<Mutex<T>>,
-}
-
-impl<T> InboxConversation<T>
-where
-    T: DeliveryService + Send + Sync + 'static,
-{
-    pub fn new(convo_id: String, ds: Arc<Mutex<T>>) -> Self {
-        Self { convo_id, _ds: ds }
-    }
-
-    #[allow(dead_code)]
-    fn encrypt(frame: Frame) -> EncryptedBytes {
-        EncryptedBytes {
-            encryption: Some(Encryption::Plaintext(Plaintext {
-                bytes: frame.encode_to_vec(),
-            })),
-        }
-    }
-
-    fn decrypt(enc_bytes: EncryptedBytes) -> Result<Frame, UmbraError> {
-        // Check payload contained bytes
-        let a = enc_bytes
-            .encryption
-            .ok_or(UmbraError::DecodingError("".into()))?;
-
-        // Ensure the encryption type was "Reversed"
-        let buf = if let Encryption::Plaintext(r) = a {
-            Ok(r.bytes)
-        } else {
-            Err(UmbraError::DecodingError("Unsupported Enc".into()))
-        }?;
-
-        Frame::decode(buf.as_slice()).map_err(|e| UmbraError::DecodingError(e.to_string()))
-    }
-}
-
-impl<T> Conversation<T> for InboxConversation<T>
-where
-    T: DeliveryService + Send + Sync + 'static,
-{
-    // Returns an encoded payload for testing.
-    fn send(&self, _tag: u32, _message: Blob) -> Vec<u8> {
-        panic!("This should never be called. Clients would never send messages to themselves")
-    }
-
-    // returns any message which was not handled by this conversation
-    fn recv(&self, enc_bytes: EncryptedBytes) -> Result<Option<Frame>, UmbraError> {
-        let frame = Self::decrypt(enc_bytes)?;
-
-        // Handle SDS data
-        let _ = frame.reliability_info;
-
-        match frame
-            .frame_type
-            .as_ref()
-            .ok_or(UmbraError::DecodingError("bad packet".into()))?
-        {
-            frame::FrameType::Content(content_frame) => {
-                warn!(
-                    "Content recieved on InboxTopic. Dropping. {:?}",
-                    content_frame
-                );
-                Ok(None)
-            }
-            frame::FrameType::ConversationInvite(conversation_invite) => {
-                debug!("Invite {:?}", conversation_invite);
-                Ok(Some(frame))
-            }
-        }
-    }
-
-    fn convo_id(&self) -> String {
-        self.convo_id.clone()
-    }
+    fn recv(&self, enc_bytes: EncryptedBytes) -> Result<(), UmbraError>;
 }
 
 pub struct UmbraState<T: DeliveryService + Send + Sync + 'static> {
@@ -231,26 +51,12 @@ where
         ds: Arc<Mutex<T>>,
         addrs: Vec<Addr>,
     ) -> Option<Arc<Mutex<dyn Conversation<T> + Send + Sync>>> {
-        let convo_id = topic_private_convo(addrs);
+        let convo_id = topic_private_convo(addrs); //TODO: conversations need to determine their ContentTopic
+
+        debug!("Register convo: {}", convo_id);
         self.convos.insert(
             convo_id.clone(),
             Arc::new(Mutex::new(PrivateConversation::new(convo_id.clone(), ds))),
-        );
-
-        self.get_conversation(convo_id)
-    }
-
-    pub fn create_inbox_convo(
-        &mut self,
-        ds: Arc<Mutex<T>>,
-        addr: Addr,
-    ) -> Option<Arc<Mutex<dyn Conversation<T> + Send + Sync>>> {
-        let convo_id = topic_inbox_convo(addr);
-
-        info!("Register convo: {}", convo_id);
-        self.convos.insert(
-            convo_id.clone(),
-            Arc::new(Mutex::new(InboxConversation::new(convo_id.clone(), ds))),
         );
 
         self.get_conversation(convo_id)
@@ -266,6 +72,7 @@ where
 
 pub struct UmbraClient<T: DeliveryService + Send + Sync + 'static> {
     addr: Addr,
+    inbox_topic: String,
     ds: Arc<Mutex<T>>,
     state: Arc<RwLock<UmbraState<T>>>,
     on_content_handlers: Arc<RwLock<Vec<Box<dyn Fn(String, ContentFrame) + Send + Sync>>>>,
@@ -276,22 +83,23 @@ where
     T: DeliveryService + Send + Sync + 'static,
 {
     pub fn new(ds: T, addr: Addr) -> Self {
+        let inbox_topic = topic_inbox_convo(&addr);
+
         Self {
             addr,
+            inbox_topic,
             ds: Arc::new(Mutex::new(ds)),
             state: Arc::new(RwLock::new(UmbraState::new())),
             on_content_handlers: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
-    pub fn start(&self) {
+    pub fn start(&mut self) {
         {
-            self.state
-                .write()
-                .unwrap()
-                .create_inbox_convo(self.ds.clone(), self.address());
+            let x = self.state.write().unwrap();
         }
 
+        let self_topic = self.inbox_topic.clone();
         let ds = self.ds.clone();
         let state = self.state.clone();
         let handler = self.on_content_handlers.clone();
@@ -307,8 +115,14 @@ where
                 }
 
                 let incoming_bytes = incomming_bytes.unwrap();
-                Self::recv(&state, &ds, &handler, incoming_bytes.as_slice())
-                    .unwrap_or_else(|e| error!("Error receiving bytes: {:?}", e));
+                Self::recv(
+                    &state,
+                    &ds,
+                    &handler,
+                    &self_topic,
+                    incoming_bytes.as_slice(),
+                )
+                .unwrap_or_else(|e| error!("Error receiving bytes: {:?}", e));
             }
         });
     }
@@ -335,7 +149,7 @@ where
         state.get_conversation(addr)
     }
 
-    pub fn create_conversation(
+    pub fn create_private_conversation(
         &self,
         addr: Addr,
     ) -> Result<Arc<Mutex<dyn Conversation<T> + Send + Sync + 'static>>, UmbraError> {
@@ -343,54 +157,60 @@ where
 
         let addrs = vec![self.address(), addr.clone()];
 
+        // Create Local side
         let mut state = self.state.write().unwrap();
         let convo = state.create_conversation(self.ds.clone(), addrs.clone());
-
         let convo = convo.ok_or_else(|| UmbraError::UnexpectedError)?;
 
-        let msg = ConversationInvite::new(addrs).to_frame(None);
-        self.send_frame(topic, msg)?;
+        self.send_invite(addr)?;
 
         Ok(convo)
     }
 
-    pub fn send_frame(&self, convo_id: String, frame: Frame) -> Result<(), UmbraError> {
-        let encrypted = EncryptedBytes {
-            encryption: Some(Encryption::Plaintext(Plaintext {
-                bytes: frame.encode_to_vec(),
-            })),
+    fn send_invite(&self, recipient: String) -> Result<(), UmbraError> {
+        let invite = inbox_v1_frame::FrameType::InvitePrivateV1(invite::InvitePrivateV1 {
+            participants: sorted_pariticipants(vec![self.address(), recipient.clone()]),
+        });
+
+        let frame = InboxV1Frame::new("conversationID".into(), invite);
+
+        let encrypted_bytes = EncryptedBytes {
+            encryption: Some(encrypted_bytes::Encryption::Plaintext(
+                encryption::Plaintext {
+                    payload: frame.encode_to_vec(),
+                },
+            )),
         };
 
-        let bytes = Envelope {
-            encrypted_bytes: Some(encrypted),
-            conversation_id: convo_id,
-        }
-        .to_payload()
-        .encode_to_vec();
-
-        self.ds.lock().unwrap().send(bytes.clone())
+        self.ds.lock().unwrap().send(
+            encrypted_bytes
+                .to_envelope(topic_inbox_convo(&recipient), 0)
+                .encode_to_vec(),
+        )
     }
 
     pub fn recv(
         state: &Arc<RwLock<UmbraState<T>>>,
         ds: &Arc<Mutex<T>>,
         handler: &Arc<RwLock<Vec<Box<dyn Fn(String, ContentFrame) + Send + Sync>>>>,
+        topic: &str,
         bytes: &[u8],
     ) -> Result<(), UmbraError> {
         // Placeholder for receiving messages
 
-        let payload =
-            TaggedPayload::decode(bytes).map_err(|e| UmbraError::DecodingError(e.to_string()))?;
+        let envelope = UmbraEnvelopeV1::decode(bytes)
+            .map_err(|e| UmbraError::DecodingError(e.to_string()))
+            .expect(format!("Failed to decode UmbraEnvelopeV1: {:?}", bytes).as_str());
 
-        match PayloadTags::from(payload.tag) {
-            PayloadTags::Uknown => todo!(),
-            PayloadTags::TagEnvelope => {
-                let envelope = Envelope::decode(payload.payload_bytes.as_slice())
-                    .map_err(|e| UmbraError::DecodingError(e.to_string()))?;
-                Self::handle_envelope(&state, ds, handler, envelope)
-            }
-            PayloadTags::TagPublicFrame => todo!(),
-        }
+        Self::handle_envelope(state, ds, handler, envelope, topic)
+    }
+
+    fn get_conversation_by_hint(
+        state: &Arc<RwLock<UmbraState<T>>>,
+        hint: String,
+        salt: u64,
+    ) -> Option<Arc<Mutex<dyn Conversation<T> + Send + Sync>>> {
+        state.read().unwrap().get_conversation(hint)
     }
 
     // In the future the payload type will be tightly coupled to the Conversation
@@ -398,56 +218,72 @@ where
         state: &Arc<RwLock<UmbraState<T>>>,
         ds: &Arc<Mutex<T>>,
         handler: &Arc<RwLock<Vec<Box<dyn Fn(String, ContentFrame) + Send + Sync>>>>,
-        payload: Envelope,
+        payload: UmbraEnvelopeV1,
+        self_topic: &str,
     ) -> Result<(), UmbraError> {
         debug!("ReceivedEnvelope: {:?}", payload);
 
-        let enc = payload.encrypted_bytes.ok_or(UmbraError::DecodingError(
-            "No encrypted bytes found".to_string(),
-        ))?;
+        if payload.conversation_hint == self_topic {
+            debug!("Received Inbox Envelope: {:?}", payload);
+            let enc_bytes = EncryptedBytes::decode(&*payload.payload)?;
 
-        let res_convo = state
-            .read()
-            .unwrap()
-            .get_conversation(payload.conversation_id.clone());
+            Self::handle_invite(state, ds, enc_bytes)?;
+        }
+
+        let res_convo =
+            Self::get_conversation_by_hint(state, payload.conversation_hint.clone(), payload.salt);
 
         // TODO: Don't ignore missing conversations
         if let None = res_convo {
-            debug!("No matching Conversation ({})", payload.conversation_id);
+            debug!("No matching Conversation ({})", payload.conversation_hint);
             return Ok(());
         }
+        let enc = EncryptedBytes::decode(&*payload.payload)?;
         let convo = res_convo.unwrap().clone();
 
-        let opt_frame = convo.lock().unwrap().recv(enc)?;
+        convo.lock().unwrap().recv(enc)
+    }
 
-        // If no frame was returned, then all frames were parsed already - shortcircuit
-        let frame = if let None = opt_frame {
-            return Ok(());
+    fn handle_invite(
+        state: &Arc<RwLock<UmbraState<T>>>,
+        ds: &Arc<Mutex<T>>,
+        encrypted_invite: EncryptedBytes,
+    ) -> Result<(), UmbraError> {
+        if !matches!(
+            encrypted_invite.encryption,
+            Some(encrypted_bytes::Encryption::Plaintext(_))
+        ) {
+            warn!("Invalid Encryption Type for Invite");
+        }
+
+        let bytes = if let encrypted_bytes::Encryption::Plaintext(b) =
+            encrypted_invite.encryption.unwrap()
+        {
+            b.payload
         } else {
-            opt_frame.unwrap()
+            return Err(UmbraError::DecodingError(
+                "Invalid Encryption Type for Invite".into(),
+            ));
         };
 
-        match frame.frame_type.as_ref().unwrap() {
-            frame::FrameType::Content(content_frame) => {
-                for handler in handler.read().unwrap().iter() {
-                    handler(
-                        convo.lock().unwrap().convo_id().clone(),
-                        content_frame.clone(),
-                    );
-                }
+        let convo_frame = InboxV1Frame::decode(bytes.as_slice())
+            .map_err(|e| UmbraError::DecodingError(e.to_string()))?;
 
-                Ok(())
-            }
-            frame::FrameType::ConversationInvite(conversation_invite) => {
-                info!("Received Conversation Invite: {:?}", conversation_invite);
-
+        match convo_frame
+            .frame_type
+            .as_ref()
+            .ok_or(UmbraError::DecodingError("bad packet".into()))?
+        {
+            inbox_v1_frame::FrameType::InvitePrivateV1(invite) => {
                 state
                     .write()
                     .unwrap()
-                    .create_conversation(ds.clone(), conversation_invite.participants.clone());
-                return Ok(());
+                    .create_conversation(ds.clone(), invite.participants.clone())
+                    .ok_or_else(|| UmbraError::UnexpectedError)?;
             }
-        }
+        };
+
+        Ok(())
     }
 }
 
@@ -457,6 +293,11 @@ fn topic_private_convo(mut addrs: Vec<String>) -> String {
     format!("/private/{}", topic)
 }
 
-fn topic_inbox_convo(addr: String) -> String {
+fn topic_inbox_convo(addr: &str) -> String {
     format!("/inbox/{}", addr)
+}
+
+fn sorted_pariticipants(mut participants: Vec<String>) -> Vec<String> {
+    participants.sort();
+    participants
 }

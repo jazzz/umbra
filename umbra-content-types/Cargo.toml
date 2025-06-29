@@ -6,7 +6,6 @@ version.workspace = true
 [dependencies]
 prost = "0.13.5"
 bytes = "0.4"
-umbra-types = { path = "../umbra-types" }
 
 [build-dependencies]
 prost-build = "0.13.5"

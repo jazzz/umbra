@@ -1,16 +1,7 @@
 [workspace]
-members = [
-    "umbra-content-types",
-    "umbra-poc",
-    "umbra-sdk",
-    "umbra-types"
-]
+members = ["umbra-poc", "umbra-sdk", "umbra-content-types"]
 
-default-members = [
-    "umbra-content-types",
-    "umbra-poc",
-    "umbra-sdk",
-]
+default-members = ["umbra-poc", "umbra-sdk", "umbra-content-types"]
 
 resolver = "3"
 
@@ -18,5 +9,3 @@ resolver = "3"
 version = "0.0.1-dev"
 
 [workspace.dependencies]
-
-

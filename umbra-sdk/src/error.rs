@@ -14,6 +14,9 @@ pub enum UmbraError {
     #[error("Problem decoding type: {0}")]
     DecodingError(String),
 
+    #[error("ProstError: {0}")]
+    ProtobufDecode(#[from] prost::DecodeError),
+
     #[error("Unknown error occurred")]
     UnexpectedError,
 

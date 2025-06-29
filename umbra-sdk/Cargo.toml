@@ -10,7 +10,6 @@ rand = "0.9.1"
 sha3 = "0.10.8"
 thiserror = "2.0.12"
 tracing = "0.1.41"
-umbra-types = { path = "../umbra-types" }
+umbra-types = { git = "https://github.com/waku-org/chat_proto.git", branch = "base_types", subdir = "rust/umbra-types" }
 
 [build-dependencies]
-

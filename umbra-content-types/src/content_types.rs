@@ -1,9 +1,12 @@
 use prost::Message;
 use types::*;
-use umbra_types::payload::TaggedContent;
 
 pub mod types {
     include!(concat!(env!("OUT_DIR"), "/umbra.contenttypes.rs"));
+}
+
+pub trait TaggedContent {
+    const TAG: u32;
 }
 
 impl ChatMessage {
@@ -35,6 +38,5 @@ mod tests {
     #[test]
     fn test_chat_message_new() {
         let chat_message = ChatMessage::new("Hello, World!".to_string());
-        chat_message.to_frame(None);
     }
 }
